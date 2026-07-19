@@ -1,0 +1,14 @@
+{
+  "name": "Hkeeli - Lebanese Arabic",
+  "short_name": "Hkeeli",
+  "description": "Learn Lebanese Arabic, one lesson at a time.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FBF6EE",
+  "theme_color": "#C1440E",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
