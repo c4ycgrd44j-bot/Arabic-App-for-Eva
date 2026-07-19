@@ -66,18 +66,20 @@
   }
   .unit-header h2{ margin:0 0 2px; font-size:17px; }
   .unit-header p{ margin:0; font-size:13px; opacity:.85; }
-  .path{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .path{ display:flex; flex-direction:column; align-items:center; gap:22px; }
+  .path-node{ display:flex; flex-direction:column; align-items:center; gap:6px; }
   .node{
-    width:72px; height:72px; border-radius:50%;
+    width:64px; height:64px; border-radius:50%;
     background: var(--gold);
     display:flex; align-items:center; justify-content:center;
-    font-size:28px; color:#fff; box-shadow: 0 4px 0 rgba(0,0,0,0.15), var(--shadow);
+    font-size:24px; color:#fff; box-shadow: 0 4px 0 rgba(0,0,0,0.15), var(--shadow);
     border:none; position:relative; cursor:pointer;
   }
   .node.locked{ background:#D8CFC0; box-shadow:0 4px 0 rgba(0,0,0,0.08); }
   .node.done{ background: var(--green-ok); }
-  .node .stars{ position:absolute; bottom:-10px; font-size:11px; background:#fff; border-radius:10px; padding:2px 7px; color:var(--ink); box-shadow:var(--shadow); font-weight:700; }
-  .node-label{ font-size:12px; font-weight:700; color:var(--ink-soft); margin-bottom:8px; text-align:center; max-width:140px; }
+  .node.review{ background: var(--terracotta); }
+  .node .stars{ position:absolute; bottom:-10px; font-size:10px; background:#fff; border-radius:10px; padding:2px 7px; color:var(--ink); box-shadow:var(--shadow); font-weight:700; }
+  .node-label{ font-size:12px; font-weight:700; color:var(--ink-soft); text-align:center; max-width:160px; }
 
   /* ---- Lesson screen ---- */
   .lesson-header{
@@ -92,6 +94,7 @@
   .quiz-body{ flex:1; padding:8px 20px 20px; display:flex; flex-direction:column; }
   .prompt-label{ font-size:14px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin-bottom:14px;}
   .prompt-main{ display:flex; flex-direction:column; align-items:flex-start; gap:6px; margin-bottom:22px;}
+  .prompt-row{ display:flex; align-items:center; gap:12px; }
   .arabic-big{ font-size:40px; font-weight:700; direction:rtl; }
   .translit{ font-size:16px; color:var(--ink-soft); font-style:italic; }
   .english-big{ font-size:26px; font-weight:700; }
@@ -107,7 +110,22 @@
     border:none; font-size:15px; flex-shrink:0; cursor:pointer;
   }
   .mini-speak:active{ transform:scale(0.9); }
-  .prompt-row{ display:flex; align-items:center; gap:12px; }
+
+  /* ---- Teach card ---- */
+  .teach-card{
+    background:var(--card); border-radius:20px; padding:28px 22px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; gap:10px;
+    text-align:center; margin-top:10px;
+  }
+  .teach-badge{
+    background:var(--gold); color:#fff; font-size:12px; font-weight:800;
+    letter-spacing:.06em; padding:4px 12px; border-radius:12px;
+  }
+  .teach-arabic{ font-size:52px; font-weight:700; direction:rtl; margin-top:6px; }
+  .teach-translit{ font-size:20px; color:var(--teal); font-weight:700; font-style:italic; }
+  .teach-english{ font-size:18px; color:var(--ink-soft); font-weight:600; }
+  .teach-tip{ font-size:13px; color:var(--ink-soft); margin-top:8px; }
+
   .options{ display:flex; flex-direction:column; gap:12px; }
   .option{
     background:var(--card); border:2px solid var(--line); border-radius:14px;
@@ -166,10 +184,12 @@
   .wordbank-list{ padding:6px 18px 100px; overflow-y:auto; flex:1; }
   .word-row{ background:var(--card); border-radius:14px; padding:10px 12px 10px 16px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; box-shadow:var(--shadow); cursor:pointer; }
   .word-row:active{ background:#F5EFE3; }
+  .word-row.notlearned{ opacity:.45; }
   .word-row .wa{ direction:rtl; font-size:20px; font-weight:700;}
   .word-row .wt{ font-size:12px; color:var(--ink-soft); font-style:italic;}
   .word-row .we{ font-size:14px; font-weight:600; color:var(--ink-soft); text-align:right; flex:1; }
   .section-title{ font-size:20px; font-weight:800; padding:14px 18px 4px; }
+  .bank-note{ font-size:12px; color:var(--ink-soft); padding: 0 18px 8px; }
 </style>
 </head>
 <body>
@@ -217,6 +237,7 @@
   <!-- WORDBANK SCREEN -->
   <div class="screen" id="screen-bank">
     <div class="topbar"><div class="brand"><span class="leaf">📚</span> Word Bank</div></div>
+    <div class="bank-note">Words appear in full color once Eva has learned them. Tap any word to hear it.</div>
     <div class="wordbank-list" id="wordbank-list"></div>
   </div>
 
@@ -230,89 +251,150 @@
 <script>
 /* =========================================================
    HKEELI — Lebanese Arabic learning app for Eva
-   Single-file PWA. Data + engine below.
+   v2: true-beginner progression.
+   - Units are split into small lessons (~4 new words each).
+   - Lessons TEACH each new word with a card before quizzing.
+   - Early questions are easy (2 choices), harder ones come later.
+   - Typing only appears in the Review lesson of each unit.
+   - Every lesson node unlocks sequentially, Duolingo-style.
+   Audio: plays audio/<word id>.m4a if the file exists in the
+   repo (real Lebanese recordings!), otherwise falls back to
+   the phone's Arabic text-to-speech.
    ========================================================= */
 
 const UNITS = [
   {
     id:'sounds', title:'Letters & Sounds', sub:'Get your ear tuned to Lebanese sounds', icon:'🔤',
     words:[
-      {ar:'عربي', tr:"3arabi", en:'Arabic'},
-      {ar:'حلو', tr:"7elou", en:'sweet / nice'},
-      {ar:'خبز', tr:'khobz', en:'bread'},
-      {ar:'غالي', tr:'ghali', en:'expensive'},
-      {ar:'قلبي', tr:"2albi", en:'my heart'},
-      {ar:'هون', tr:'hon', en:'here'},
-      {ar:'ضو', tr:'dow', en:'light'},
-      {ar:'صحة', tr:'sa7a', en:'health / bless you'},
+      {id:'marhaba', ar:'مرحبا', tr:'marhaba', en:'hello'},
+      {id:'helou', ar:'حلو', tr:"7elou", en:'sweet / nice'},
+      {id:'khobz', ar:'خبز', tr:'khobz', en:'bread'},
+      {id:'ghali', ar:'غالي', tr:'ghali', en:'expensive'},
+      {id:'albi', ar:'قلبي', tr:"2albi", en:'my heart'},
+      {id:'hon', ar:'هون', tr:'hon', en:'here'},
+      {id:'dow', ar:'ضو', tr:'dow', en:'light'},
+      {id:'saha', ar:'صحة', tr:'sa7a', en:'health / bless you'},
     ]
   },
   {
     id:'greetings', title:'Greetings', sub:'Say hi like a local', icon:'👋',
     words:[
-      {ar:'مرحبا', tr:'marhaba', en:'hello'},
-      {ar:'أهلين', tr:'ahlein', en:'hi / welcome'},
-      {ar:'كيفك', tr:'kifak / kifik', en:'how are you'},
-      {ar:'منيح', tr:'mni7', en:'good / fine'},
-      {ar:'صباح الخير', tr:'saba7 el kheir', en:'good morning'},
-      {ar:'مسا الخير', tr:'masa2 el kheir', en:'good evening'},
-      {ar:'يلا', tr:'yalla', en:"let's go / come on"},
-      {ar:'مع السلامة', tr:'ma3 el salame', en:'goodbye'},
+      {id:'ahlein', ar:'أهلين', tr:'ahlein', en:'hi / welcome'},
+      {id:'kifak', ar:'كيفك', tr:'kifak / kifik', en:'how are you'},
+      {id:'mnih', ar:'منيح', tr:'mni7', en:'good / fine'},
+      {id:'yalla', ar:'يلا', tr:'yalla', en:"let's go / come on"},
+      {id:'sabah', ar:'صباح الخير', tr:'saba7 el kheir', en:'good morning'},
+      {id:'masa', ar:'مسا الخير', tr:'masa2 el kheir', en:'good evening'},
+      {id:'maasalame', ar:'مع السلامة', tr:'ma3 el salame', en:'goodbye'},
+      {id:'tosbah', ar:'تصبح على خير', tr:'tosba7 3ala kheir', en:'good night'},
     ]
   },
   {
     id:'numbers', title:'Numbers 1–10', sub:'Count it out', icon:'🔢',
     words:[
-      {ar:'واحد', tr:'wa7ad', en:'one'},
-      {ar:'تنين', tr:'tnein', en:'two'},
-      {ar:'تلاتة', tr:'tlete', en:'three'},
-      {ar:'أربعة', tr:"arb3a", en:'four'},
-      {ar:'خمسة', tr:'khamse', en:'five'},
-      {ar:'ستة', tr:'sitte', en:'six'},
-      {ar:'سبعة', tr:"sab3a", en:'seven'},
-      {ar:'تمانية', tr:'tmene', en:'eight'},
-      {ar:'تسعة', tr:"tis3a", en:'nine'},
-      {ar:'عشرة', tr:"3ashra", en:'ten'},
+      {id:'wahad', ar:'واحد', tr:'wa7ad', en:'one'},
+      {id:'tnein', ar:'تنين', tr:'tnein', en:'two'},
+      {id:'tlete', ar:'تلاتة', tr:'tlete', en:'three'},
+      {id:'arbaa', ar:'أربعة', tr:"arb3a", en:'four'},
+      {id:'khamse', ar:'خمسة', tr:'khamse', en:'five'},
+      {id:'sitte', ar:'ستة', tr:'sitte', en:'six'},
+      {id:'sabaa', ar:'سبعة', tr:"sab3a", en:'seven'},
+      {id:'tmene', ar:'تمانية', tr:'tmene', en:'eight'},
+      {id:'tisaa', ar:'تسعة', tr:"tis3a", en:'nine'},
+      {id:'ashra', ar:'عشرة', tr:"3ashra", en:'ten'},
     ]
   },
   {
     id:'phrases', title:'Basic Phrases', sub:'Everyday essentials', icon:'💬',
     words:[
-      {ar:'شكرا', tr:'shukran', en:'thank you'},
-      {ar:'عفوا', tr:'3afwan', en:"you're welcome"},
-      {ar:'لو سمحت', tr:'law samaht', en:'please'},
-      {ar:'آسف', tr:'asef / asfe', en:'sorry'},
-      {ar:'نعم', tr:'na3am', en:'yes'},
-      {ar:'لأ', tr:"la2", en:'no'},
-      {ar:'شو إسمك', tr:'shu ismak / ismik', en:"what's your name"},
-      {ar:'ما بعرف', tr:'ma ba3rif', en:"I don't know"},
+      {id:'shukran', ar:'شكرا', tr:'shukran', en:'thank you'},
+      {id:'afwan', ar:'عفوا', tr:'3afwan', en:"you're welcome"},
+      {id:'lawsamaht', ar:'لو سمحت', tr:'law sama7t', en:'please'},
+      {id:'asef', ar:'آسف', tr:'asef / asfe', en:'sorry'},
+      {id:'naam', ar:'نعم', tr:'na3am', en:'yes'},
+      {id:'la', ar:'لأ', tr:"la2", en:'no'},
+      {id:'shuismak', ar:'شو إسمك', tr:'shu ismak / ismik', en:"what's your name"},
+      {id:'mabaarif', ar:'ما بعرف', tr:'ma ba3rif', en:"I don't know"},
     ]
   },
   {
     id:'family', title:'Family', sub:'Talk about the people you love', icon:'👨‍👩‍👧',
     words:[
-      {ar:'ماما', tr:'mama', en:'mom'},
-      {ar:'بابا', tr:'baba', en:'dad'},
-      {ar:'أخ', tr:'akh', en:'brother'},
-      {ar:'أخت', tr:'ekht', en:'sister'},
-      {ar:'تيتا', tr:'teta', en:'grandma'},
-      {ar:'جدو', tr:'jiddo', en:'grandpa'},
-      {ar:'زوجة', tr:'zawje', en:'wife'},
-      {ar:'زوج', tr:'zawj', en:'husband'},
-      {ar:'بنت', tr:'bint', en:'daughter / girl'},
-      {ar:'إبن', tr:'ibn', en:'son'},
+      {id:'mama', ar:'ماما', tr:'mama', en:'mom'},
+      {id:'baba', ar:'بابا', tr:'baba', en:'dad'},
+      {id:'akh', ar:'أخ', tr:'akh', en:'brother'},
+      {id:'ekht', ar:'أخت', tr:'ekht', en:'sister'},
+      {id:'teta', ar:'تيتا', tr:'teta', en:'grandma'},
+      {id:'jiddo', ar:'جدو', tr:'jiddo', en:'grandpa'},
+      {id:'zawje', ar:'زوجة', tr:'zawje', en:'wife'},
+      {id:'zawj', ar:'زوج', tr:'zawj', en:'husband'},
+      {id:'bint', ar:'بنت', tr:'bint', en:'daughter / girl'},
+      {id:'ibn', ar:'إبن', tr:'ibn', en:'son'},
     ]
   },
 ];
 
+const LESSON_SIZE = 4; // new words introduced per lesson
+
+/* ---------- Lesson plan: units → sequence of small lesson nodes ---------- */
+function buildLessonPlan(){
+  const plan = [];
+  UNITS.forEach(unit=>{
+    const chunks = [];
+    for(let i=0; i<unit.words.length; i+=LESSON_SIZE){
+      chunks.push(unit.words.slice(i, i+LESSON_SIZE));
+    }
+    chunks.forEach((chunk, li)=>{
+      plan.push({
+        key: unit.id + ':' + li,
+        unit,
+        lessonIdx: li,
+        isReview: false,
+        newWords: chunk,
+        // words available as answer choices: everything taught up to and incl. this lesson
+        knownWords: unit.words.slice(0, (li+1)*LESSON_SIZE),
+        label: 'Lesson ' + (li+1),
+      });
+    });
+    if(chunks.length > 1){
+      plan.push({
+        key: unit.id + ':review',
+        unit,
+        lessonIdx: chunks.length,
+        isReview: true,
+        newWords: [],
+        knownWords: unit.words.slice(),
+        label: 'Review',
+      });
+    }
+  });
+  return plan;
+}
+const LESSON_PLAN = buildLessonPlan();
+
 /* ---------- Persistence ---------- */
-const STORAGE_KEY = 'hkeeli_progress_v1';
+const STORAGE_KEY = 'hkeeli_progress_v2';
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  return { xp:0, streak:0, lastPractice:null, unitStars:{}, wordStats:{} };
+  // migrate old v1 progress: if they had stars on a unit, credit its lessons
+  let migrated = { xp:0, streak:0, lastPractice:null, lessonStars:{} };
+  try{
+    const old = JSON.parse(localStorage.getItem('hkeeli_progress_v1'));
+    if(old){
+      migrated.xp = old.xp || 0;
+      migrated.streak = old.streak || 0;
+      migrated.lastPractice = old.lastPractice || null;
+      if(old.unitStars){
+        LESSON_PLAN.forEach(node=>{
+          if(old.unitStars[node.unit.id] >= 1){ migrated.lessonStars[node.key] = old.unitStars[node.unit.id]; }
+        });
+      }
+    }
+  }catch(e){}
+  return migrated;
 }
 function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 let state = loadState();
@@ -329,6 +411,18 @@ function bumpStreak(){
   saveState();
 }
 
+/* ---------- Which words has Eva learned? ---------- */
+function isNodeDone(key){ return (state.lessonStars[key] || 0) >= 1; }
+function learnedWordIds(){
+  const ids = new Set();
+  LESSON_PLAN.forEach(node=>{
+    if(!node.isReview && isNodeDone(node.key)){
+      node.newWords.forEach(w=>ids.add(w.id));
+    }
+  });
+  return ids;
+}
+
 /* ---------- Navigation ---------- */
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -342,32 +436,39 @@ function showTab(tab){
 function goHome(){ document.getElementById('bottomnav').style.display='flex'; showTab('home'); }
 
 /* ---------- Home path rendering ---------- */
-function isUnitUnlocked(idx){
-  if(idx===0) return true;
-  const prev = UNITS[idx-1];
-  return !!(state.unitStars[prev.id] && state.unitStars[prev.id] >= 1);
-}
 function renderHome(){
   document.getElementById('streak-val').textContent = state.streak;
   document.getElementById('xp-val').textContent = state.xp;
   const container = document.getElementById('home-path');
   container.innerHTML = '';
-  UNITS.forEach((u, idx)=>{
-    const unlocked = isUnitUnlocked(idx);
-    const stars = state.unitStars[u.id] || 0;
-    const block = document.createElement('div');
-    block.className = 'unit-block';
-    block.innerHTML = `
-      <div class="unit-header"><h2>${u.icon} ${u.title}</h2><p>${u.sub}</p></div>
-      <div class="path">
-        <div class="node-label">${unlocked ? (stars>0 ? 'Practice again' : 'Start lesson') : 'Complete previous unit to unlock'}</div>
-        <button class="node ${unlocked ? (stars>0?'done':'') : 'locked'}" ${unlocked? `onclick="startLesson('${u.id}')"`:''}>
-          ${unlocked ? (stars>0?'✓':u.icon) : '🔒'}
-          ${stars>0?`<div class="stars">${'⭐'.repeat(stars)}</div>`:''}
-        </button>
-      </div>
+
+  let currentUnitId = null, pathEl = null;
+  LESSON_PLAN.forEach((node, idx)=>{
+    if(node.unit.id !== currentUnitId){
+      currentUnitId = node.unit.id;
+      const block = document.createElement('div');
+      block.className = 'unit-block';
+      block.innerHTML = `<div class="unit-header"><h2>${node.unit.icon} ${node.unit.title}</h2><p>${node.unit.sub}</p></div><div class="path"></div>`;
+      container.appendChild(block);
+      pathEl = block.querySelector('.path');
+    }
+    const unlocked = idx === 0 || isNodeDone(LESSON_PLAN[idx-1].key);
+    const stars = state.lessonStars[node.key] || 0;
+    const done = stars >= 1;
+
+    const nodeWrap = document.createElement('div');
+    nodeWrap.className = 'path-node';
+    const sub = node.isReview ? 'Practice everything in this unit'
+              : node.newWords.map(w=>w.tr.split('/')[0].trim()).join(' · ');
+    nodeWrap.innerHTML = `
+      <button class="node ${node.isReview?'review':''} ${done?'done':''} ${unlocked?'':'locked'}">
+        ${unlocked ? (done ? '✓' : (node.isReview?'🏆':node.unit.icon)) : '🔒'}
+        ${stars>0?`<div class="stars">${'⭐'.repeat(stars)}</div>`:''}
+      </button>
+      <div class="node-label">${node.label}${unlocked?'<br><span style="font-weight:500">'+sub+'</span>':''}</div>
     `;
-    container.appendChild(block);
+    if(unlocked){ nodeWrap.querySelector('.node').onclick = ()=>startLesson(node.key); }
+    pathEl.appendChild(nodeWrap);
   });
 }
 
@@ -375,6 +476,7 @@ function renderHome(){
 function renderWordBank(){
   const list = document.getElementById('wordbank-list');
   list.innerHTML = '';
+  const learned = learnedWordIds();
   UNITS.forEach(u=>{
     const h = document.createElement('div');
     h.className='section-title';
@@ -382,16 +484,33 @@ function renderWordBank(){
     list.appendChild(h);
     u.words.forEach(w=>{
       const row = document.createElement('div');
-      row.className='word-row';
+      row.className='word-row' + (learned.has(w.id) ? '' : ' notlearned');
       row.innerHTML = `<div><div class="wa">${w.ar}</div><div class="wt">${w.tr}</div></div><div class="we">${w.en}</div><button class="mini-speak" aria-label="Play pronunciation">🔊</button>`;
-      row.onclick = ()=>speak(w.ar);
+      row.onclick = ()=>playWord(w);
       list.appendChild(row);
     });
   });
 }
 
-/* ---------- Text to speech ---------- */
-function speak(text){
+/* ---------- Audio: real recordings first, TTS fallback ----------
+   Drop files named audio/<word id>.m4a into the repo (recorded by a
+   real Lebanese speaker) and they play automatically. Missing files
+   fall back to the phone's Arabic text-to-speech. */
+const audioAvailability = {}; // id -> Audio | false
+function playWord(word){
+  if(audioAvailability[word.id] === false){ speakTTS(word.ar); return; }
+  let a = audioAvailability[word.id];
+  if(!a){
+    a = new Audio('audio/' + word.id + '.m4a');
+    audioAvailability[word.id] = a;
+  }
+  a.currentTime = 0;
+  a.play().catch(()=>{
+    audioAvailability[word.id] = false;
+    speakTTS(word.ar);
+  });
+}
+function speakTTS(text){
   try{
     if(!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
@@ -406,45 +525,72 @@ function speak(text){
 }
 if('speechSynthesis' in window){ window.speechSynthesis.onvoiceschanged = ()=>{}; }
 
-/* ---------- Quiz engine ---------- */
-let session = null;
-
+/* ---------- Exercise building ---------- */
 function shuffle(arr){
   const a = arr.slice();
   for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
-function sample(arr, n, excludeIdx){
-  const pool = arr.map((_,i)=>i).filter(i=>i!==excludeIdx);
-  return shuffle(pool).slice(0,n);
+function pickDistractors(word, pool, n){
+  return shuffle(pool.filter(w=>w.id!==word.id)).slice(0,n);
 }
 
-function buildExercises(unit){
-  const words = unit.words;
-  let ex = [];
+/* Teaching lesson structure (Duolingo-style gentle ramp):
+   - words are introduced 2 at a time with teach cards
+   - right after each pair: EASY questions (2 choices) about just those words
+   - after all words are taught: a mixed round with up to 4 choices
+   Review lessons skip teaching and mix harder question types incl. typing. */
+function buildExercises(node){
+  const ex = [];
+  if(!node.isReview){
+    const words = node.newWords;
+    for(let i=0; i<words.length; i+=2){
+      const pair = words.slice(i, i+2);
+      pair.forEach(w=>ex.push({type:'teach', word:w}));
+      pair.forEach(w=>{
+        // easy: 2 options, distractor drawn from words taught so far this lesson
+        const taughtSoFar = words.slice(0, i+2);
+        const pool = taughtSoFar.length>1 ? taughtSoFar : node.knownWords;
+        ex.push({type:'mc_en', word:w, options: shuffle([w, ...pickDistractors(w, pool, 1)])});
+        ex.push({type:'listen', word:w, options: shuffle([w, ...pickDistractors(w, pool, 1)])});
+      });
+    }
+    // mixed round over the whole lesson, slightly harder (up to 4 options)
+    shuffle(words).forEach((w, i)=>{
+      const nOpts = Math.min(3, node.knownWords.length-1);
+      if(i%2===0) ex.push({type:'mc_en', word:w, options: shuffle([w, ...pickDistractors(w, node.knownWords, nOpts)])});
+      else ex.push({type:'mc_ar', word:w, options: shuffle([w, ...pickDistractors(w, node.knownWords, nOpts)])});
+    });
+    return ex; // teaching lessons keep intro order — no global shuffle
+  }
+  // review lesson: harder, all unit words, includes typing
+  const words = shuffle(node.knownWords);
   words.forEach((w, i)=>{
-    const distractors = sample(words, 3, i).map(j=>words[j]);
-    ex.push({ type:'mc_en', word:w, options: shuffle([w, ...distractors]) });
-    const distractors2 = sample(words, 3, i).map(j=>words[j]);
-    ex.push({ type:'mc_ar', word:w, options: shuffle([w, ...distractors2]) });
-    ex.push({ type:'listen', word:w, options: shuffle([w, ...sample(words,3,i).map(j=>words[j])]) });
+    const nOpts = Math.min(3, node.knownWords.length-1);
+    ex.push({type: i%2===0 ? 'mc_en' : 'mc_ar', word:w, options: shuffle([w, ...pickDistractors(w, node.knownWords, nOpts)])});
+    if(i%3===0) ex.push({type:'listen', word:w, options: shuffle([w, ...pickDistractors(w, node.knownWords, nOpts)])});
+    if(i%2===0) ex.push({type:'type', word:w});
   });
-  words.forEach((w,i)=>{ if(i%2===0) ex.push({ type:'type', word:w }); });
   return shuffle(ex);
 }
 
-function startLesson(unitId){
-  const unit = UNITS.find(u=>u.id===unitId);
+/* ---------- Quiz session ---------- */
+let session = null;
+
+function startLesson(nodeKey){
+  const node = LESSON_PLAN.find(n=>n.key===nodeKey);
+  if(!node) return;
+  const queue = buildExercises(node);
   session = {
-    unit,
-    queue: buildExercises(unit),
+    node,
+    queue,
     pos:0,
-    total:0,
+    total: queue.length,
+    quizTotal: queue.filter(q=>q.type!=='teach').length,
     correctCount:0,
     hearts:5,
     missed:[],
   };
-  session.total = session.queue.length;
   document.getElementById('bottomnav').style.display='none';
   showScreen('screen-lesson');
   renderExercise();
@@ -463,6 +609,7 @@ function renderExercise(){
       session.queue = session.missed;
       session.missed = [];
       session.pos = 0;
+      session.total = session.queue.length;
     } else {
       finishLesson();
       return;
@@ -478,7 +625,24 @@ function renderExercise(){
   checkBtn.disabled = true;
   selectedOptionEl = null;
 
-  if(item.type === 'mc_en'){
+  if(item.type === 'teach'){
+    body.innerHTML = `
+      <div class="prompt-label">New word</div>
+      <div class="teach-card">
+        <div class="teach-badge">✨ NEW WORD</div>
+        <div class="teach-arabic">${item.word.ar}</div>
+        <div class="teach-translit">${item.word.tr}</div>
+        <div class="teach-english">${item.word.en}</div>
+        <button class="speak-btn" id="teach-speak" aria-label="Play pronunciation">🔊</button>
+        <div class="teach-tip">Tap the speaker to hear it as many times as you like, then try saying it out loud!</div>
+      </div>
+    `;
+    document.getElementById('teach-speak').onclick = ()=>playWord(item.word);
+    playWord(item.word);
+    checkBtn.textContent = 'GOT IT';
+    checkBtn.className = 'btn-primary ready';
+    checkBtn.disabled = false;
+  } else if(item.type === 'mc_en'){
     body.innerHTML = `
       <div class="prompt-label">Select the correct meaning</div>
       <div class="prompt-main">
@@ -490,7 +654,7 @@ function renderExercise(){
       </div>
       <div class="options" id="opts"></div>
     `;
-    document.getElementById('prompt-speak').onclick = ()=>speak(item.word.ar);
+    document.getElementById('prompt-speak').onclick = ()=>playWord(item.word);
     const opts = document.getElementById('opts');
     item.options.forEach(o=>{
       const el = document.createElement('div');
@@ -514,7 +678,7 @@ function renderExercise(){
       playBtn.className='mini-speak';
       playBtn.setAttribute('aria-label','Play pronunciation');
       playBtn.textContent='🔊';
-      playBtn.onclick = (e)=>{ e.stopPropagation(); speak(o.ar); };
+      playBtn.onclick = (e)=>{ e.stopPropagation(); playWord(o); };
       el.appendChild(playBtn);
       el.onclick = ()=>selectOption(el, o===item.word);
       opts.appendChild(el);
@@ -523,12 +687,12 @@ function renderExercise(){
     body.innerHTML = `
       <div class="prompt-label">Tap to listen, then choose the meaning</div>
       <div class="prompt-main" style="align-items:center; width:100%;">
-        <button class="speak-btn" id="speak-btn">🔊</button>
+        <button class="speak-btn" id="speak-btn" aria-label="Play pronunciation">🔊</button>
       </div>
       <div class="options" id="opts"></div>
     `;
-    document.getElementById('speak-btn').onclick = ()=>speak(item.word.ar);
-    speak(item.word.ar);
+    document.getElementById('speak-btn').onclick = ()=>playWord(item.word);
+    playWord(item.word);
     const opts = document.getElementById('opts');
     item.options.forEach(o=>{
       const el = document.createElement('div');
@@ -548,9 +712,9 @@ function renderExercise(){
         <div class="translit">meaning: ${item.word.en}</div>
       </div>
       <input class="type-input" id="type-in" placeholder="type here..." autocapitalize="off" autocorrect="off" spellcheck="false">
-      <div class="hint">Answers are flexible with spelling of numbers like 3, 7, 2 — just get close!</div>
+      <div class="hint">Answers are flexible with spelling of sounds like 3, 7, 2 — just get close!</div>
     `;
-    document.getElementById('prompt-speak').onclick = ()=>speak(item.word.ar);
+    document.getElementById('prompt-speak').onclick = ()=>playWord(item.word);
     const input = document.getElementById('type-in');
     input.addEventListener('input', ()=>{ checkBtn.disabled = input.value.trim().length===0; });
     input.focus();
@@ -577,6 +741,12 @@ function fuzzyMatch(input, answer){
 
 function onCheckOrNext(){
   const btn = document.getElementById('check-btn');
+  const item = session.queue[session.pos];
+  if(item && item.type === 'teach' && btn.textContent === 'GOT IT'){
+    session.pos += 1;
+    renderExercise();
+    return;
+  }
   if(btn.textContent === 'CHECK'){
     evaluateCurrent();
   } else {
@@ -601,6 +771,8 @@ function evaluateCurrent(){
   if(correct){ session.correctCount++; }
   else {
     session.hearts = Math.max(0, session.hearts-1);
+    // when Eva misses a word, re-teach it before re-quizzing it
+    session.missed.push({type:'teach', word:item.word});
     session.missed.push(item);
   }
 }
@@ -613,7 +785,7 @@ function showFeedback(correct, item){
       <div>${correct?'✅':'❌'}</div>
       <div>
         <div>${correct? 'Nice!' : 'Correct answer: '+correctAnswerText}</div>
-        ${!correct?`<div class="feedback-sub">${item.word.ar} — ${item.word.tr} — ${item.word.en}</div>`:''}
+        ${!correct?`<div class="feedback-sub">${item.word.ar} — ${item.word.tr} — ${item.word.en} (we'll see this one again!)</div>`:''}
       </div>
     </div>
   `;
@@ -628,8 +800,8 @@ function finishLesson(){
   const earned = session.correctCount * 10;
   state.xp += earned;
   bumpStreak();
-  const prevStars = state.unitStars[session.unit.id] || 0;
-  state.unitStars[session.unit.id] = Math.max(prevStars, session.hearts>=4?3:session.hearts>=2?2:1);
+  const prevStars = state.lessonStars[session.node.key] || 0;
+  state.lessonStars[session.node.key] = Math.max(prevStars, session.hearts>=4?3:session.hearts>=2?2:1);
   saveState();
 
   document.getElementById('complete-xp').textContent = earned;
@@ -638,7 +810,7 @@ function finishLesson(){
   showScreen('screen-complete');
 }
 function computeAccuracy(){
-  const denom = session.total || 1;
+  const denom = session.quizTotal || 1;
   const pct = Math.round((session.correctCount / denom) * 100);
   return Math.max(0, Math.min(100, pct));
 }
